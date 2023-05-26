@@ -1,104 +1,137 @@
-import express from "express";
-import { Router } from "express";
-const { v4: uuidv4 } = require("uuid");
-const bodyParser = require("body-parser");
+const express = require('express');
+const router = express.Router();
+const fs = require('fs');
+const { v4: uuidv4 } = require('uuid');
 
-const app = express();
-app.use(bodyParser.json());
+const PRODUCTS_FILE_PATH = './productos.json';
+const CARTS_FILE_PATH = './cart.json';
 
-// Simulación de base de datos
-const products = [];
-
-// Rutas para el manejo de productos
-const routerProducts = Router();
-
-// Listar todos los productos
-routerProducts.get("/", (req, res) => {
-  const { limit } = req.query;
-
-  const productsSliced = limit ? products.slice(0, limit) : products;
-
-  res.json(productsSliced);
+// Obtener todos los productos 
+router.get('/', (req, res) => {
+  const products = JSON.parse(fs.readFileSync(PRODUCTS_FILE_PATH));
+  res.json(products);
 });
 
-// Traer un producto por su id
-routerProducts.get("/:pid", (req, res) => {
-  const { pid } = req.params;
-
-  const product = products.find((p) => p.id == pid);
-
-  if (!product) {
-    return res.status(404).json({ error: "Producto no encontrado" });
+// Producto segun su id
+router.get('/:id', (req, res) => {
+  const products = JSON.parse(fs.readFileSync(PRODUCTS_FILE_PATH));
+  const product = products.find(p => p.id == req.params.id);
+  if (product) {
+    res.json(product);
+  } else {
+    res.status(404).json({ error: 'Producto no encontrado' });
   }
-
-  res.json(product);
 });
 
-// Agregar un producto
-routerProducts.post("/", (req, res) => {
-  const { title, description, code, price, status = true, stock, category, thumbnails = [] } = req.body;
-
-  if (!title || !description || !code || !price || !stock || !category) {
-    return res.status(400).json({ error: "Todos los campos son obligatorios, excepto thumbnails" });
-  }
-
-  const newProduct = {
-    id: uuidv4(),
-    title,
-    description,
-    code,
-    price,
-    status,
-    stock,
-    category,
-    thumbnails,
-  };
-
+// Publicar nuevo producto
+router.post('/', (req, res) => {
+  const products = JSON.parse(fs.readFileSync(PRODUCTS_FILE_PATH));
+  const newProduct = req.body;
+  newProduct.id = uuidv4();
   products.push(newProduct);
-
-  res.json({ message: "Producto creado exitosamente", product: newProduct });
+  fs.writeFileSync(PRODUCTS_FILE_PATH, JSON.stringify(products));
+  res.json(newProduct);
 });
 
-// Actualizar un producto
-routerProducts.put("/:pid", (req, res) => {
-  const { pid } = req.params;
-
-  const { title, description, code, price, status, stock, category, thumbnails } = req.body;
-
-  const productIndex = products.findIndex((p) => p.id == pid);
-
-  if (productIndex < 0) {
-    return res.status(404).json({ error: "Producto no encontrado" });
-  }
-
-  const productUpdated = {
-    ...products[productIndex],
-    title: title ?? products[productIndex].title,
-    description: description ?? products[productIndex].description,
-    code: code ?? products[productIndex].code,
-    price: price ?? products[productIndex].price,
-    status: status ?? products[productIndex].status,
-    stock: stock ?? products[productIndex].stock,
-    category: category ?? products[productIndex].category,
-    thumbnails: thumbnails ?? products[productIndex].thumbnails,
-  };
-
-  products[productIndex] = productUpdated;
-
-  res.json({ message: "Producto actualizado exitosamente", product: productUpdated });
+// Eliminar un solo pruducto por id
+router.delete('/:id', (req, res) => {
+  let products = JSON.parse(fs.readFileSync(PRODUCTS_FILE_PATH));
+  const deletedProduct = products.find(p => p.id == req.params.id);
+  products = products.filter(p => p.id != req.params.id);
+  fs.writeFileSync(PRODUCTS_FILE_PATH, JSON.stringify(products));
+  res.json(deletedProduct);
 });
 
-// Eliminar un producto
-routerProducts.delete("/:pid", (req, res) => {
-  const { pid } = req.params;
-
-  const productIndex = products.findIndex((p) => p.id == pid);
-
-  if (productIndex < 0) {
-    return res.status(404).json({ error: "Producto no encontrado" });
+// Actualizar producto segun su id
+router.put('/:id', (req, res) => {
+  let products = JSON.parse(fs.readFileSync(PRODUCTS_FILE_PATH));
+  const index = products.findIndex(p => p.id == req.params.id);
+  if (index !== -1) {
+    products[index] = { ...products[index], ...req.body, id: req.params.id };
+    fs.writeFileSync(PRODUCTS_FILE_PATH, JSON.stringify(products));
+    res.json(products[index]);
+  } else {
+    res.status(404).json({ error: 'Producto no encontrado' });
   }
+});
 
-  products.splice(productIndex, 1);
+// Metodo post para comprar productos
+router.post('/buy', (req, res) => {
+  try {
+    const carts = JSON.parse(fs.readFileSync(CARTS_FILE_PATH));
+    const products = JSON.parse(fs.readFileSync(PRODUCTS_FILE_PATH));
 
-  res.json({ message: "Error"});
-})
+    const cartId = req.body.cartId;
+    const cart = carts.find((c) => c.id == cartId);
+
+    if (!cart) {
+      return res.status(404).json({ error: "Carrito no encontrado" });
+    }
+
+    const cartProducts = cart.products.map((cp) => {
+      const product = products.find((p) => p.id == cp.productId);
+
+      if (!product) {
+        return null;
+      }
+
+      if (product.stock < cp.quantity) {
+        return {
+          ...product,
+          quantity: cp.quantity,
+          error: "Producto fuera de stock",
+        };
+      }
+
+      product.stock -= cp.quantity;
+
+      return {
+        ...product,
+        quantity: cp.quantity,
+      };
+    });
+
+    const validProducts = cartProducts.filter((p) => p);
+
+    if (validProducts.length < cartProducts.length) {
+      fs.writeFileSync(CARTS_FILE_PATH, JSON.stringify(carts));
+      return res.status(400).json({
+        error: "Uno o más productos están fuera de stock",
+        products: validProducts,
+      });
+    }
+
+    // Agregar productos nuevos comprados al carrito
+    const newCart = {
+      id: uuidv4(),
+      products: [],
+    };
+    
+    for (let i = 0; i < cartProducts.length; i++) {
+      const product = cartProducts[i];
+      const cartProduct = cart.products[i];
+      const purchasedProduct = {
+        ...product,
+        quantity: cartProduct.quantity
+      };
+      newCart.products.push(purchasedProduct);
+    }
+    
+    // reemplacar carrito nuevo con el viejo
+    const cartIndex = carts.findIndex((c) => c.id == cartId);
+    carts[cartIndex] = newCart;
+
+    // archivar los productos
+    fs.writeFileSync(CARTS_FILE_PATH, JSON.stringify(carts));
+
+    // Respuesta de exito
+    return res.status(200).json({
+      message: "Compra exitosa",
+      cart: newCart
+    });
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Error interno del servidor" });
+  }
+});

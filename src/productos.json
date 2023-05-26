@@ -1,3 +1,20 @@
 [
-    
-]
+    {
+      "id": "1",
+      "name": "zapatillas",
+      "price": 15.99,
+      "stock": 10
+    },
+    {
+      "id": "2",
+      "name": "camisas",
+      "price": 29.99,
+      "stock": 5
+    },
+    {
+      "id": "3",
+      "name": "pantalones",
+      "price": 79.99,
+      "stock": 2
+    }
+  ]

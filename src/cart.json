@@ -1,3 +1,16 @@
-[
-    
-]
+{
+    "items": [
+      {
+        "id": "1",
+        "name": "Camiseta",
+        "price": 15.99,
+        "quantity": 2
+      },
+      {
+        "id": "2",
+        "name": "Pantalón",
+        "price": 29.99,
+        "quantity": 1
+      }
+    ]
+  }
