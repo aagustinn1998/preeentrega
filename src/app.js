@@ -12,4 +12,4 @@ app.use("/api/carts", routerCarts);
 app.use("/api/products", routerProducts);
 
 // Iniciar servidor
-app.listen(3000, () => { console.log('Servidor iniciado en puerto 3000');});
+app.listen(8080, () => { console.log('Servidor iniciado en puerto 8080');});
